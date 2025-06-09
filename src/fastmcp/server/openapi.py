@@ -277,60 +277,42 @@ class OpenAPITool(Tool):
 
         for param_name, param_value in path_params.items():
             # Handle array path parameters with style 'simple' (comma-separated)
-            # In OpenAPI, 'simple' is the default style for path parameters
-            param_info = next(
-                (p for p in self._route.parameters if p.name == param_name), None
-            )
-
-            if param_info and isinstance(param_value, list):
-                # Check if schema indicates an array type
-                schema = param_info.schema_
-                is_array = schema.get("type") == "array"
-
-                if is_array:
-                    # Format array values as comma-separated string
-                    # This follows the OpenAPI 'simple' style (default for path)
+            # In OpenAPI, 'simple' is the default style for path parameters.
+            if isinstance(param_value, list):
+                try:
                     if all(
-                        isinstance(item, str | int | float | bool)
-                        for item in param_value
+                        isinstance(item, (str, int, float, bool)) for item in param_value
                     ):
-                        # Handle simple array types
+                        # Simple array types
                         path = path.replace(
                             f"{{{param_name}}}", ",".join(str(v) for v in param_value)
                         )
                     else:
-                        # Handle complex array types (containing objects/dicts)
-                        try:
-                            # Try to create a simple representation without Python syntax artifacts
-                            formatted_parts = []
-                            for item in param_value:
-                                if isinstance(item, dict):
-                                    # For objects, serialize key-value pairs
-                                    item_parts = []
-                                    for k, v in item.items():
-                                        item_parts.append(f"{k}:{v}")
-                                    formatted_parts.append(".".join(item_parts))
-                                else:
-                                    # Fallback for other complex types
-                                    formatted_parts.append(str(item))
+                        # Complex array types (e.g. objects/dicts)
+                        formatted_parts = []
+                        for item in param_value:
+                            if isinstance(item, dict):
+                                item_parts = [f"{k}:{v}" for k, v in item.items()]
+                                formatted_parts.append(".".join(item_parts))
+                            else:
+                                formatted_parts.append(str(item))
 
-                            # Join parts with commas
-                            formatted_value = ",".join(formatted_parts)
-                            path = path.replace(f"{{{param_name}}}", formatted_value)
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to format complex array path parameter '{param_name}': {e}"
-                            )
-                            # Fallback to string representation, but remove Python syntax artifacts
-                            str_value = (
-                                str(param_value)
-                                .replace("[", "")
-                                .replace("]", "")
-                                .replace("'", "")
-                                .replace('"', "")
-                            )
-                            path = path.replace(f"{{{param_name}}}", str_value)
-                    continue
+                        path = path.replace(
+                            f"{{{param_name}}}", ",".join(formatted_parts)
+                        )
+                except Exception as e:  # pragma: no cover - unexpected errors
+                    logger.warning(
+                        f"Failed to format complex array path parameter '{param_name}': {e}"
+                    )
+                    str_value = (
+                        str(param_value)
+                        .replace("[", "")
+                        .replace("]", "")
+                        .replace("'", "")
+                        .replace('"', "")
+                    )
+                    path = path.replace(f"{{{param_name}}}", str_value)
+                continue
 
             # Default handling for non-array parameters or non-array schemas
             path = path.replace(f"{{{param_name}}}", str(param_value))
